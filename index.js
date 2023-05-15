@@ -1,7 +1,5 @@
 const express = require("express");
 const cors = require("cors");
-const authRoutes = require("./routes/auth");
-const messageRoutes = require("./routes/messages");
 const app = express();
 const axios = require('axios')
 const socket = require("socket.io");
