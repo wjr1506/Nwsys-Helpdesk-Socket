@@ -10,15 +10,34 @@ app.use(cors());
 app.use(express.json());
 
 
-//receber mensagem das integrações | Whatsapp | Instagram | Facebook | Telegram |
-app.post('/socket/messages/', async (req, res) => {
+//rota que recebe mensagem das integrações | Whatsapp | Instagram | Facebook | Telegram |
+app.post('/socket/message/', async (req, res) => {
 
-  io.to(json.conversation.id).emit("event", req.body)
+  console.log(req.body)
+
+  //receber e enviar mensagem
+  // socket.on("send-msg", (data) => {
+  //   var json = JSON.parse(data)
+  //   console.log(json)
+
+  //   //status da mensagem
+  //   //verificar se há usuários na sala e se a conversa for chat
+  //   if (global.usersInRom.length > 0 && global.usersInRom.find(usr => json.conversation.id == usr.guid).channel == 'chat') {
+  //     //verificar se o usuário está online no socket
+  //     if (onlineUsersid.get(json.receiver.id)) {
+  //       console.log('status de enviado')
+  //     } else {
+  //       console.log('status de entregue')
+  //     }
+  //   }
+  //   io.to(json.conversation.id).emit("event", data)
+  // });
+  // io.to(json.conversation.id).emit("event", req.body)
   return res.sendStatus(200)
 
 })
 
-//rota que recebe status da mensagem
+//rota que recebe atualização do status da mensagem
 app.post('/socket/message/notification/', async (req, res) => {
 
   io.to(json.conversation.id).emit("event", req.body)
@@ -115,10 +134,7 @@ app.post('/socket/conversation/delete/', async (req, res) => {
   return res.sendStatus(200)
 
 })
-
-
-
-
+  
 
 const server = app.listen(process.env.PORT, () => {
   console.log(`Server started on ${process.env.PORT}`)
@@ -148,7 +164,7 @@ io.on("connection", (socket) => {
 
 
   //adicionar usuários nas salas
-  //preciso remover o usuário que mudar de sala
+  //preciso remover o usuário que deslogar do socket
   socket.on('sala', (data) => {
     console.log(data)
 
@@ -185,21 +201,5 @@ io.on("connection", (socket) => {
   })
 
 
-  //receber e enviar mensagem
-  socket.on("send-msg", (data) => {
-    var json = JSON.parse(data)
-    console.log(json)
 
-    //status da mensagem
-    //verificar se há usuários na sala e se a conversa for chat
-    if (global.usersInRom.length > 0 && global.usersInRom.find(usr => json.conversation.id == usr.guid).channel == 'chat') {
-      //verificar se o usuário está online no socket
-      if (onlineUsersid.get(json.receiver.id)) {
-        console.log('status de enviado')
-      } else {
-        console.log('status de entregue')
-      }
-    }
-    io.to(json.conversation.id).emit("event", data)
-  });
 });
