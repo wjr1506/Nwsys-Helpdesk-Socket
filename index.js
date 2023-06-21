@@ -9,39 +9,72 @@ require("dotenv").config();
 app.use(cors());
 app.use(express.json());
 
+var dataUTC = new Date().toLocaleDateString();
+var hUTC = new Date().toLocaleTimeString();
+
+//userID -> socket
+//Map(1) { 1668 => 'G3MFuRWDooKAeCFlAAAB' }
+global.onlineUsers = new Map();
+
+
+
+// [
+// {
+// guid: '556392031185@21c7f765-528d-484d-bf98-df93772e0b42',
+// user_in_room: '1668',
+// assignee: '1668',
+//requester: '84',
+//channel: 'chat',
+//socketid: '-OYQ2spj0gY-Wg2xAAAD'
+//}
+//]
+global.usersInRom = [];
+var usrsMessageReceiveds = []
 
 //rota que recebe mensagem das integrações | Whatsapp | Instagram | Facebook | Telegram |
 app.post('/socket/message/', async (req, res) => {
 
-  console.log(req.body)
+  var exemple = {
+    id: 'message_id',
+    conversation: { id: 'id@guid' },
+    sender: { id: 1, name: 'name' },
+    receiver: { id: 2 },
+    type: 'text',
+    status: 0,
+    content: '[RADTESTE]: asdacccxxx',
+    guid: 'guid',
+    timestamp: 'yyyy-mm-dd hh:mm:ss.mss'
+  }
+
+  var message = req.body.message;
+  var peopleList = req.body.peopleList;
+  // var message = JSON.parse(message)
 
   //receber e enviar mensagem
   // socket.on("send-msg", (data) => {
   //   var json = JSON.parse(data)
-  //   console.log(json)
 
-  //   //status da mensagem
-  //   //verificar se há usuários na sala e se a conversa for chat
-  //   if (global.usersInRom.length > 0 && global.usersInRom.find(usr => json.conversation.id == usr.guid).channel == 'chat') {
-  //     //verificar se o usuário está online no socket
-  //     if (onlineUsersid.get(json.receiver.id)) {
-  //       console.log('status de enviado')
-  //     } else {
-  //       console.log('status de entregue')
-  //     }
-  //   }
+  console.log(global.usersInRom.length)
+  //status da mensagem
+  //verificar se há usuários na sala e se a conversa for chat
+  if (global.usersInRom.length > 0 && global.usersInRom.find(usr => message['conversation.id'] == usr.guid).channel == 'chat') {
+    //verificar se o usuário está online no socket
+    if (global.onlineUsers.get(message['receiver.id'])) {
+      console.log('status de entregue/recebido')
+      message.status = 2 //dois ponteiros
+    } else {
+      console.log('status de enviado')
+      message.status = 1  //um ponteiro
+    }
+  }
   //   io.to(json.conversation.id).emit("event", data)
   // });
-  // io.to(json.conversation.id).emit("event", req.body)
-  return res.sendStatus(200)
 
-})
 
-//rota que recebe atualização do status da mensagem
-app.post('/socket/message/notification/', async (req, res) => {
-
-  io.to(json.conversation.id).emit("event", req.body)
-  return res.sendStatus(200)
+  io.to(message['conversation.id']).emit("event", message)
+  let onlineUsersId = getKeysFromMap(global.onlineUsers);
+  let json = sameValues(onlineUsersId, peopleList);
+  return res.status(200).json({ online_users_list : json })
 
 })
 
@@ -68,13 +101,13 @@ app.post('/socket/conversation/create/', async (req, res) => {
   }
 
   peopleList = req.body.peopleList;
-  console.log(req.body)
+  conversation = req.body.conversation
   //para cada Id recebido na lista de usuários
   peopleList.forEach(e => {
 
-    if (onlineUsersid.get(e) != undefined) {
-      // io.to(onlineUsersid.get(e)).emit("create-conversation", req.body.conversation);
-      io.to(onlineUsersid.get(e)).emit("update-conversation", req.body.conversation);
+    if (onlineUsers.get(e) != undefined) {
+      // io.to(onlineUsers.get(e)).emit("create-conversation", req.body.conversation);
+      io.to(onlineUsers.get(e)).emit("update-conversation", conversation);
 
     }
 
@@ -96,11 +129,12 @@ app.post('/socket/conversation/update/', async (req, res) => {
   }
 
   peopleList = req.body.peopleList;
+  conversationId = req.body.conversationId
   //para cada Id recebido na lista de usuários
   peopleList.forEach(e => {
 
-    if (onlineUsersid.get(e) != undefined) {
-      io.to(onlineUsersid.get(e)).emit("update-conversation", req.body.conversationId);
+    if (onlineUsers.get(e) != undefined) {
+      io.to(onlineUsers.get(e)).emit("update-conversation", conversationId);
     }
 
   });
@@ -121,12 +155,13 @@ app.post('/socket/conversation/delete/', async (req, res) => {
   }
 
   peopleList = req.body.peopleList;
+  conversationId = req.body.conversationId
   //para cada Id recebido na lista de usuários
   peopleList.forEach(e => {
 
-    if (onlineUsersid.get(e) != undefined) {
-      // io.to(onlineUsersid.get(e)).emit("delete-conversation", req.body.conversation);
-      io.to(onlineUsersid.get(e)).emit("update-conversation", req.body.conversationId);
+    if (onlineUsers.get(e) != undefined) {
+      // io.to(onlineUsers.get(e)).emit("delete-conversation", req.body.conversation);
+      io.to(onlineUsers.get(e)).emit("update-conversation", conversationId);
 
     }
 
@@ -134,11 +169,9 @@ app.post('/socket/conversation/delete/', async (req, res) => {
   return res.sendStatus(200)
 
 })
-  
 
 const server = app.listen(process.env.PORT, () => {
-  console.log(`Server started on ${process.env.PORT}`)
-
+  console.log(`Server started on http://localhost:${process.env.PORT}`)
 });
 
 const io = socket(server, {
@@ -148,25 +181,38 @@ const io = socket(server, {
   // },
 });
 
-global.onlineUsersid = new Map();
-global.usersInRom = [];
 
 
 io.on("connection", (socket) => {
-  global.chatSocket = socket;
+
+  if (socket.id) {
+    console.log("\n" + 'connect ' + dataUTC + " - " + hUTC + "\n")
+    io.to(socket.id).emit("reconnect", { "1": "reconnect" })
+  }
 
   //adicionar usuários logados no sistema
-  //userID -> socket
-  socket.on("add-user", (userId) => {
-    console.log(`usuário ${userId} logado`)
-    onlineUsersid.set(userId, socket.id);
+  socket.on("add-user", (data) => {
+
+    var exemple = 84;
+
+    console.log(`usuário ${data} logado ` + dataUTC + " " + hUTC + "\n")
+    onlineUsers.set(data, socket.id);
+    console.log('====================')
+    console.log(onlineUsers)
+    console.log('====================')
+
   });
 
-
   //adicionar usuários nas salas
-  //preciso remover o usuário que deslogar do socket
   socket.on('sala', (data) => {
-    console.log(data)
+
+    var exemple = {
+      guid: 'id@guid',
+      user_in_room: '84',
+      assignee: '64',
+      requester: '115',
+      channel: 'whatsapp'
+    }
 
     //conectar usuário a sala
     socket.join(data.guid)
@@ -176,7 +222,6 @@ io.on("connection", (socket) => {
 
     //e o usuário estiver logado
     //é rearmazenado o novo socket do usuário
-
     if (usersInRom) {
 
       usersInRom.socketid = socket.id
@@ -184,10 +229,6 @@ io.on("connection", (socket) => {
     } else {
 
       //salvar os dados em um array
-      //guid sala
-      //id do usuário
-      //conexão com o socket
-
       global.usersInRom.push({
         guid: data.guid,
         user_in_room: data.user_in_room,
@@ -197,9 +238,54 @@ io.on("connection", (socket) => {
         socketid: socket.id
       })
 
+      console.log(global.usersInRom)
+
     }
   })
 
+  socket.on("disconnect", (reason, details) => {
 
+    if (global.onlineUsers != undefined) {
+      let userId = getKeyByValue(onlineUsers, socket.id) 
+      console.log(`user ${userId} foi removido ` + dataUTC + " - " + hUTC)
+      onlineUsers.delete(userId)
+      console.log(onlineUsers)
 
+    };
+  });
 });
+
+
+//===functions===
+
+function getKeyByValue(map, searchValue) {
+  for (let [key, value] of map) {
+    if (value === searchValue) {
+      return key;
+    }
+  }
+
+  // Se o valor não for encontrado, pode retornar null ou lançar uma exceção, dependendo do seu caso de uso.
+  return null;
+}
+
+//pegar chaves do mapa e retornar como array
+function getKeysFromMap(map) {
+  return Array.from(map.keys());
+}
+
+//pegar duas listas e retornar o valor igual entre elas
+function sameValues(listaA, listaB) {
+  const valoresIguais = [];
+
+  for (let i = 0; i < listaA.length; i++) {
+    for (let j = 0; j < listaB.length; j++) {
+      if (listaA[i] === listaB[j]) {
+        valoresIguais.push(listaA[i]);
+        break;
+      }
+    }
+  }
+
+  return valoresIguais;
+}
