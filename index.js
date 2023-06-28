@@ -13,8 +13,7 @@ app.use(express.json());
 var dataUTC = new Date().toLocaleDateString();
 var hUTC = new Date().toLocaleTimeString();
 
-//userID -> socket
-//Map(1) { 1668 => 'G3MFuRWDooKAeCFlAAAB' }
+//userGUID + organizationGUID -> {userGUID,organizaionGUID, exp, sokcet}
 global.onlineUsers = new Map();
 global.onlineUsersJson = {
 
@@ -89,8 +88,8 @@ app.post('/socket/message/', async (req, res) => {
   var message = req.body.message;
   var peopleList = req.body.peopleList;
   message['receiver.guid'] = 'dcb384d5-5266-4e31-945d-b322293e4077'
-  // var message = JSON.parse(message)
 
+  //status da mensagem
   if (global.onlineUsers.size > 0) {
 
     //se o usuário que recebeu estiver online
@@ -98,7 +97,6 @@ app.post('/socket/message/', async (req, res) => {
     if (global.onlineUsers.get(message['receiver.guid'] + userobj.organization_credential_guid)) {
 
       //encontrar o usuário caso o destinatário da conversa esteja na sala
-
       if (global.usersInRom.find(usr => usr.guid == message['conversation.id'] && usr.user_id_in_room == message['receiver.id'] && usr.organization_guid == userobj.organization_credential_guid)) {
         message.status = 3 //dois ponteiros verdes (status de lido)
       } else {
@@ -113,7 +111,7 @@ app.post('/socket/message/', async (req, res) => {
 
   io.to(message['conversation.id']).emit("event", message)
 
-  //atualizar conversa
+  //atualizar card de conversa
   peopleList.forEach(e => {
 
     if (global.onlineUsers.get(e + userobj.organization_credential_guid) != undefined) {
@@ -135,32 +133,42 @@ app.post('/socket/message/', async (req, res) => {
 
 app.post('/socket/message/status/', async (req, res) => {
 
-  var exemple = {
-    id: 'message_id',
-    conversation: { id: 'id@guid' },
-    sender: { id: 1, name: 'name' },
-    receiver: { id: 2 },
-    type: 'text',
-    status: 0,
-    content: '[RADTESTE]: asdacccxxx',
-    guid: 'guid',
-    timestamp: 'yyyy-mm-dd hh:mm:ss.mss'
-  }
+  const userobj = await ensureAuth(req.headers.authorization)
 
-  var message = req.body.message;
+  const exmeple = {
+    'conversation': '123@guid',
+    'messages': [{
+      'id': 'b1922e8f-2f93-4bf8-8501-1a085327b5a8',
+      'conversation_id':
+        '556392031185@06585cae-8036-4c9e-a30f-7583703edf9a',
+      'content':
+        '[WELLINTON]: Conversa iniciada pelo(a) consultor(a) WELLINTON.',
+      'sender_id': 84,
+      'receiver': 1668,
+      'status': 0,
+      'guid': 'B1922E8F-2F93-4BF8-8501-1A085327B5A8'
+    },],
+    'peopleList': [
+      '0604b181-a69e-460b-8cb6-fccf94e4a3fd',
+      'dcb384d5-5266-4e31-945d-b322293e4077'
+    ],
+  };
+
+  var conversation = req.body.conversation;
+  // var receiver_guid = req.body.receiver_guid;
+  var messageList = req.body.messages;
   var peopleList = req.body.peopleList;
-  // var message = JSON.parse(message)
 
-  //receber e enviar mensagem
-  // socket.on("send-msg", (data) => {
-  //   var json = JSON.parse(data)
+  io.to(conversation).emit("message-status", messageList);
 
   //status da mensagem
 
+  let onlineUsersId = []
 
+  getKeysFromMap(global.onlineUsers).forEach(e => {
+    onlineUsersId = [...onlineUsersId, global.onlineUsers.get(e).user_guid]
+  });
 
-  io.to(message['conversation.id']).emit("event", message)
-  let onlineUsersId = getKeysFromMap(global.onlineUsers);
   let json = sameValues(onlineUsersId, peopleList);
   return res.status(200).json({ online_users_list: json })
 
@@ -235,21 +243,22 @@ app.post('/socket/conversation/create/', async (req, res) => {
 
   peopleList = req.body.peopleList;
   conversation = req.body.conversation
-  //para cada Id recebido na lista de usuários
 
-  peopleList.forEach(e => {
-    if (onlineUsers.get(e + userobj.organization_credential_guid) != undefined) {
+  //para cada GUID recebido na lista de usuários
+  peopleList.forEach(guid => {
+    //verificar se está online
+    if (onlineUsers.get(guid + userobj.organization_credential_guid) != undefined) {
 
-      io.to(onlineUsers.get(e + userobj.organization_credential_guid)['socket_id']).emit("create-conversation", conversation);
+      io.to(onlineUsers.get(guid + userobj.organization_credential_guid)['socket_id']).emit("create-conversation", conversation);
       // io.to(onlineUsers.get(e)).emit("create-conversation", conversation);
     }
   });
 
   let onlineUsersId = []
-
-
-  getKeysFromMap(global.onlineUsers).forEach(e => {
-    onlineUsersId = [...onlineUsersId, global.onlineUsers.get(e).user_guid]
+  //decidir para quem vai ser entregado
+  getKeysFromMap(global.onlineUsers).forEach(keysPOGuid => {
+    //keysPeopleOrganizationGuid
+    onlineUsersId = [...onlineUsersId, global.onlineUsers.get(keysPOGuid).user_guid]
   });
 
   let json = sameValues(onlineUsersId, peopleList);
@@ -381,14 +390,13 @@ io.on("connection", async (socket) => {
     //se recarregar a página
     const users = global.usersInRom.find(usr => usr.user_id_in_room == data.user_id_in_room && usr.organization_guid == userobj.organization_credential_guid) //localizar se o usuário está em uma sala
     const userIndex = global.usersInRom.findIndex(usr => usr.user_id_in_room === data.user_id_in_room && usr.organization_guid == userobj.organization_credential_guid); //localizar index do usuário
-    console.log(global.usersInRom)
     if (users) {
 
       if (users.guid == data.guid) {
-        console.log('mesma sala')
+        // console.log('mesma sala')
         usersInRom[userIndex].socketid = socket.id
       } else {
-        console.log('nova sala')
+        // console.log('nova sala')
         usersInRom[userIndex].guid = data.guid
         usersInRom[userIndex].assignee = data.assignee
         usersInRom[userIndex].requester = data.requester
@@ -397,11 +405,12 @@ io.on("connection", async (socket) => {
       }
     } else {
       //salvar os dados em um array
-      console.log('primeira sala')
+      // console.log('primeira sala')
       global.usersInRom.push({
         guid: data.guid,
         organization_guid: userobj.organization_credential_guid,
         user_id_in_room: data.user_id_in_room,
+        user_guid_in_room: userobj.user_guid,
         assignee: data.assignee,
         requester: data.requester,
         channel: data.channel,
@@ -424,9 +433,6 @@ io.on("connection", async (socket) => {
     };
   });
 });
-
-
-
 
 //===functions===
 
